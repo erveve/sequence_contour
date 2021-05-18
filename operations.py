@@ -2,7 +2,6 @@ import numpy as np
 import math
 from math import inf
 
-from numpy.lib.shape_base import split
 from shapely.geometry import Point, Polygon
 
 two_opt_swap = lambda r,i,k: np.concatenate((r[0:i+1],r[k:i:-1],r[k+1:len(r)]))
