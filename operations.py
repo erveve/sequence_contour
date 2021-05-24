@@ -2,28 +2,79 @@ import numpy as np
 import math
 from math import inf
 
-from shapely.geometry import Point, Polygon
-
 two_opt_swap = lambda r,i,k: np.concatenate((r[0:i+1],r[k:i:-1],r[k+1:len(r)]))
+
+
+def get_abc(xs, ys, n):
+    ''' Returns coeffs of the equations of each line:
+        ax + by + c = 0 '''
+    a = ys[:-1] - ys[1:]
+    b = xs[1:] - xs[:-1]
+    c = xs[:-1]*ys[1:] - xs[1:]*ys[:-1]
+
+    return a,b,c
+
+
+def intersect_x(a1, a2, b1, b2, c1, c2):
+    ''' Returns have these lines intersection, 
+                x-coord of intersection point of two lines'''
+    if (b1*a2-b2*a1)!=0:
+        y_int = (c2*a1-c1*a2)/(b1*a2-b2*a1)  
+        x_int = (-c1-b1*y_int)/a1
+        
+        return True, x_int
+    else:
+        return False, 0
+
+
+def ray_tracing(data, sorted_data, n):
+    res = 0
+    
+    center = [np.sum(data[:, 0])/n,np.sum(data[:, 1])/n]
+    max_x = np.max(data[:,0])
+
+    n = len(sorted_data)
+    xs = data[sorted_data,0]
+    ys = data[sorted_data,1]
+    xs = np.append(xs,xs[0])
+    ys = np.append(ys,ys[0])
+    a, b, c = get_abc(xs, ys, n)
+    
+    for i in range (n-1):
+        if a[i]!=0:        
+            x_int = (-c[i]-b[i]*center[1])/a[i]
+            res += 1 if (min(xs[i], xs[i+1]) <= x_int <= max(xs[i], xs[i+1]) and
+                        (center[0] <= x_int <= max_x)) else 0
+        else:
+            res += 1 if ys[i]==center[1] else 0
+
+    return res
+
+
+# def get_dead_ends(data, sorted_data):
+#     _, indices = np.unique(data[sorted_data], return_inverse=True, axis=0)
+#     res = np.append(indices[:2]==indices[-2:], indices[2:]==indices[:-2])
+#     return np.where(res)[0]
+
 
 def count_loops(data, sorted_data, n):
     res = 0
+    de = 0
 
     xs = data[sorted_data,0]
     ys = data[sorted_data,1]
+    n = len(xs)
 
-    a = [ys[i]-ys[i+1] for i in range (n-1)]
-    b = [xs[i+1]-xs[i] for i in range (n-1)]
-    c = [xs[i]*ys[i+1] - xs[i+1]*ys[i] for i in range (n-1)]
+    a,b,c = get_abc(xs, ys, n)
     for i in range (n-3):
         for j in range (i+2, n-1):
-            if (b[i]*a[j]-b[j]*a[i]!=0):
-                y_int = (c[j]*a[i]-c[i]*a[j])/(b[i]*a[j]-b[j]*a[i])
-                x_int = (-c[i]-b[i]*y_int)/a[i]
-                res += 1 if (min(xs[i], xs[i+1]) <= x_int <= max(xs[i], xs[i+1]) and
-                             min(xs[j], xs[j+1]) <= x_int <= max(xs[j], xs[j+1])) else 0
-                    
-    return res
+            not_null, x_int = intersect_x(a[i], a[j], b[i], b[j], c[i], c[j])
+            res += 1 if not_null and (min(xs[i], xs[i+1]) <= x_int <= max(xs[i], xs[i+1]) and
+                                      min(xs[j], xs[j+1]) <= x_int <= max(xs[j], xs[j+1])) else 0
+
+            de += 1 if not not_null and c[i]*a[j]==c[j]*a[i] and not(xs[i]==xs[j] and ys[i]==ys[j]) else 0
+
+    return res, de
 
 
 def no_loops(data, sorted_data, n):
@@ -39,19 +90,16 @@ def no_loops(data, sorted_data, n):
         xs = x[new]
         ys = y[new]
 
-        a = [ys[i]-ys[i+1] for i in range (n-1)]
-        b = [xs[i+1]-xs[i] for i in range (n-1)]
-        c = [xs[i]*ys[i+1] - xs[i+1]*ys[i] for i in range (n-1)]
+        a, b, c = get_abc(xs, ys, n)
+
         for i in range (n-3):
             for j in range (i+2, n-1):
-                if (b[i]*a[j]-b[j]*a[i]!=0):
-                    y_int = (c[j]*a[i]-c[i]*a[j])/(b[i]*a[j]-b[j]*a[i])
-                    x_int = (-c[i]-b[i]*y_int)/a[i]
-                    if (min(xs[i], xs[i+1]) <= x_int <= max(xs[i], xs[i+1]) and
-                        min(xs[j], xs[j+1]) <= x_int <= max(xs[j], xs[j+1])):
-                        flag = True
-                        new = two_opt_swap(new,i,j)
-                        break
+                not_null, x_int = intersect_x(a[i], a[j], b[i], b[j], c[i], c[j])
+                if not_null and (min(xs[i], xs[i+1]) <= x_int <= max(xs[i], xs[i+1]) and
+                                 min(xs[j], xs[j+1]) <= x_int <= max(xs[j], xs[j+1])):
+                    flag = True
+                    new = two_opt_swap(new,i,j)
+                    break
             else:
                 continue
             break
@@ -143,13 +191,11 @@ def sort_21_loops(data, sim, n):
         ind = -1
         for j in range (len(sorted_data)-1):
             dist = sim[i][sorted_data[j]] + sim[i][sorted_data[j+1]]
-            # ij = np.linalg.norm(data[i]-data[sorted_data[j]])
-            # ij1 = np.linalg.norm(data[i]-data[sorted_data[j+1]])
+
             if dist<tmp:
                 tmp = dist
                 ind = j 
         if sim[i][sorted_data[-1]] + sim[i][sorted_data[0]] < tmp:
-        # if np.linalg.norm(data[i]-data[sorted_data[j]])+np.linalg.norm(data[i]-data[0])<tmp:
             sorted_data = np.append(sorted_data,i)
         else:
             sorted_data = np.insert(sorted_data,ind+1,i)
@@ -191,37 +237,27 @@ def sort_angle(data, sim, n):
     return sort
 
 
+def sort_best(data, sim, n):
+    res = [sort_nn_no_loops(data, sim, n)]
+    cnt, _ = count_loops(data, res[0], n)
+    cnt_loops = [cnt]
+    if cnt_loops[-1]>0:
+        res.append(sort_21_no_loops(data, sim, n))
+        cnt, _ = count_loops(data, res[-1], n)
+        cnt_loops.append(cnt)
+        if cnt_loops[-1]>0:
+            res.append(sort_ch_no_loops(data, sim, n))
+            cnt, _ = count_loops(data, res[-1], n)
+            cnt_loops.append(cnt)
+
+    return res[np.argmin(np.array(cnt_loops))]
+
+
 def rotate(A,B,C):
     ''' returns where is point C for vector AB 
         if returns negative number - C is right
         otherwise left'''
     return (B[0]-A[0])*(C[1]-B[1])-(B[1]-A[1])*(C[0]-B[0])
-
-
-def grahamscan(A, n):
-    ''' returns minimum convex polygon
-        using Graham's algorithm '''
-    P = [i for i in range(n)] # list with points' numbers
-    # find point with min x
-    for i in range(1,n):
-        if A[P[i]][0]<A[P[0]][0]: # if point P[i] is left from point P[0]
-            P[i], P[0] = P[0], P[i] # swap their numbers
-    
-    # sort points против часовой стрелки
-    for i in range(2,n):
-        j = i
-        while j>1 and (rotate(A[P[0]],A[P[j-1]],A[P[j]])<0): 
-            P[j], P[j-1] = P[j-1], P[j]
-            j -= 1
-
-    # cut edges
-    S = [P[0],P[1]] # first points are in min 
-    for i in range(2,n):
-        while rotate(A[S[-2]],A[S[-1]],A[P[i]])<0:
-            del S[-1] # pop(S)
-        S.append(P[i]) # push(S,P[i])
-    
-    return S
 
 
 def jarvismarch(A, n):
@@ -258,7 +294,7 @@ def distance_ch_vert(d,a):
     return np.sqrt(d**2+a**2)
 
 
-def sort_ch(data, sim, n):
+def sort_ch_loops(data, sim, n):
     hull = jarvismarch(data, n)
     nearest_line = [[i] for i in hull]
     distances = [[0] for i in hull]
@@ -292,17 +328,13 @@ def sort_ch(data, sim, n):
             sorted_data.append(c[b[j][0]])
     
     return sorted_data
-    
 
-def calc_path(data, sim, sorted, n):
-    path = 0
-    for i in range (n-1):
-        path += sim[sorted[i]][sorted[i+1]]
-        # path += np.linalg.norm(data[sorted[i+1]]-data[sorted[i]])
-    path += sim[sorted[-1]][sorted[0]]
-    # path += np.linalg.norm(data[sorted[-1]]-data[sorted[0]])
-  
-    return path
+
+def sort_ch_no_loops(data, sim, n):
+    sorted_data = sort_ch_loops(data, sim, n)
+    new = no_loops(data, sorted_data, n)
+
+    return new
 
 
 def two_opt(cities,sim,n,improvement_threshold=0.001): 
@@ -323,100 +355,11 @@ def two_opt(cities,sim,n,improvement_threshold=0.001):
     return route 
 
 
-def split_2_contours(data,sim,n):
-    # split data in two contours
-    mid = np.argmin(sim[0][4:])-10
-    mid = 5
-    while mid<n-10:
-        data1 = data[:mid]
-        data2 = data[mid:]
+def calc_path(data, sim, sorted, n):
+    path = 0
+    for i in range (n-1):
+        path += sim[sorted[i]][sorted[i+1]]
+    path += sim[sorted[-1]][sorted[0]]
+  
+    return path
 
-        # arr1 = [Point(data1[i][0],data1[i][1]) for i in range (mid)]
-        arr1 = [Point(data1[i][0],data1[i][1]) for i in range (len(data1))]
-        arr1.append(arr1[0])
-        # arr2 = [Point(data2[i][0],data2[i][1]) for i in range (mid)]
-        arr2 = [Point(data2[i][0],data2[i][1]) for i in range (len(data2))]
-        arr2.append(arr2[0])
-        lr1 = Polygon(arr1)
-        lr2 = Polygon(arr2)
-
-        if lr1.is_valid and lr2.is_valid:
-            break
-        mid += 1
-
-    if mid==n-10:
-        mid = np.argmin(sim[0][4:])+2
-        data1 = data[:mid]
-        data2 = data[mid:]
-
-        # arr1 = [Point(data1[i][0],data1[i][1]) for i in range (mid)]
-        arr1 = [Point(data1[i][0],data1[i][1]) for i in range (len(data1))]
-        arr1.append(arr1[0])
-        # arr2 = [Point(data2[i][0],data2[i][1]) for i in range (n-mid)]
-        arr2 = [Point(data2[i][0],data2[i][1]) for i in range (len(data2))]
-        arr2.append(arr2[0])
-        lr1 = Polygon(arr1)
-        lr2 = Polygon(arr2)
-    
-    if not lr1.is_valid:
-        mid = np.argmin(sim[0][4:])+2
-        data1 = data[no_loops(data[:mid],list(range(mid)))]
-        # arr1 = [Point(data1[i][0],data1[i][1]) for i in range (mid)]
-        arr1 = [Point(data1[i][0],data1[i][1]) for i in range (len(data1))]
-        arr1.append(arr1[0])
-        lr1 = Polygon(arr1)
-
-    if not lr2.is_valid:
-        mid = np.argmin(sim[0][4:])+2
-        ind = no_loops(data[mid:],list(range(n-mid)))
-        ind = np.array(ind)+mid
-        data2 = data[ind]
-        # arr2 = [Point(data2[i][0],data2[i][1]) for i in range (n-mid)]
-        arr2 = [Point(data2[i][0],data2[i][1]) for i in range (len(data2))]
-        arr2.append(arr2[0])
-        lr2 = Polygon(arr2) 
-
-    
-    return lr1, lr2
-
-
-def get_union_intersction(data,sim,n):
-    lr1,lr2 = split_2_contours(data,sim,n)
-    ux,uy = lr1.union(lr2).boundary.coords.xy
-    union_data = np.array([-1]*len(ux))
-    ix,iy = lr1.intersection(lr2).boundary.coords.xy
-    intersect_data = np.array([-1]*len(ux))
-    eps = 0.0001
-    for i in range(n):
-        for j in range(len(ux)):
-            if abs(ux[j]-data[i,0])<=eps and abs(uy[j]-data[i,1])<=eps:
-                union_data[j] = i
-    #             break
-        for j in range(len(ix)):
-            if abs(ix[j]-data[i,0])<=eps and abs(iy[j]-data[i,1])<=eps:
-                intersect_data[j] = i
-    #             break
-
-    union_data = union_data[union_data>-1]
-    union_data = union_data[:-1]
-
-    intersect_data = intersect_data[intersect_data>-1]
-    intersect_data = intersect_data[:-1]
-    return union_data, intersect_data
-
-    
-def sort_union_intersection(data,sim,n):
-    union_data, intersect_data = get_union_intersction(data, sim, n)
-    sort_ui = union_data
-    intersect_data = np.append(intersect_data,list(set(range(n))-(set(union_data)|set(intersect_data))))
-    intersect_data = intersect_data.astype(int)
-
-    for el in intersect_data:
-        ij = np.linalg.norm(data[el]-data[sort_ui[:-1]],axis=1)
-        ij1 = np.linalg.norm(data[el]-data[sort_ui[1:]],axis=1)
-        ij = ij + ij1
-    #     ind = np.where(ij==np.amin(ij))[0][0]
-        ind = np.argmin(ij)
-        sort_ui = np.insert(sort_ui,ind+1,el)
-        
-    return sort_ui    

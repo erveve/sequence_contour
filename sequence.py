@@ -1,4 +1,3 @@
-import pandas as pd
 from matplotlib import pyplot as plt
 from operations import *
 
@@ -10,9 +9,11 @@ sort_dict = {"nn": sort_nn,
              "nn_21_loops": sort_21_loops,
              "nn_21_no_loops": sort_21_no_loops,
              "polar": sort_angle,
-             "ch": sort_ch,
+             "ch_loops": sort_ch_loops,
+             "ch_no_loops": sort_ch_no_loops,
              "2-opt": two_opt,
-             "ui": sort_union_intersection}
+             "best": sort_best}
+    
 
 class Sequence():
     def __init__(self, data, contour=[]):
@@ -26,7 +27,7 @@ class Sequence():
 
     
     def have_loops(self, return_num=False):
-        res = count_loops(self.data, self.contour, self.n)
+        res, _ = count_loops(self.data, self.contour, self.n)
         if return_num:
             return res>0, res
         else:
@@ -34,7 +35,6 @@ class Sequence():
 
     
     def have_missed_data(self, return_num=False):
-        # missed_data = np.arange(self.n)
         md = np.delete(np.arange(self.n), self.contour)
         if return_num:
             return len(md)>0, md
@@ -45,21 +45,40 @@ class Sequence():
     def is_data_unique(self, return_not_unique=False):
         _, indexes = np.unique(self.data, return_index=True, axis=0)
         res = np.delete(np.arange(self.n), indexes)
-        # set(range(self.n))-set(indexes)
         if return_not_unique:
             return len(res)==0, res
         else:
             return len(res)==0
 
+    
+    def is_single_contour(self):
+        intersections = ray_tracing(self.data, self.contour, self.n)
+        return (intersections % 2)==1 
 
-    def is_contour(self, return_problems=False):
+
+    def have_dead_ends(self):
+        _, de = count_loops(self.data, self.contour, self.n)
+        return de!=0
+
+    
+    def is_contour(self, return_all=False):
         loop = self.have_loops()
         md = self.have_missed_data()
-        unique_data = self.is_data_unique()
-        res = True if not loop and not md and unique_data else False
-        if return_problems:
-            res_str = loop*'Have loops. '+md*'Have missed data. '+(not unique_data)*'Data is not unique.'
-            return res, res_str
+        sc = self.is_single_contour()
+        # de = self.have_dead_ends()
+        # unique_data = self.is_data_unique()
+
+        res = True if not loop and not md and sc else False
+        # res = True if not loop and not md and sc and not de else False
+
+        if return_all:
+            res_all = {'Missed data': md, 
+                   'Loops': loop,
+                #    'Dead ends': de,
+                   'Single contour': sc, 
+                #    'Unique data': unique_data,
+                   'Contour': res}
+            return res_all
         else:
             return res
 
@@ -95,9 +114,9 @@ class Sequence():
 
 
 if __name__=="__main__":
-    data = pd.read_table("../data1/1.1.dat", sep=' ', header=None)
-    data = data.to_numpy()
+    data = np.loadtxt("../data/2.dat")
     seq = Sequence(data) 
+    
     global num
     num = 0
     seq.show_contour(save_fig=True)
