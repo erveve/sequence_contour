@@ -1,5 +1,6 @@
 from matplotlib import pyplot as plt
 from operations import *
+import os
 
 global sort_dict
 sort_dict = {"nn": sort_nn,
@@ -9,6 +10,7 @@ sort_dict = {"nn": sort_nn,
              "nn_21_loops": sort_21_loops,
              "nn_21_no_loops": sort_21_no_loops,
              "polar": sort_angle,
+             "ch": jarvismarch,
              "ch_loops": sort_ch_loops,
              "ch_no_loops": sort_ch_no_loops,
              "2-opt": two_opt,
@@ -27,7 +29,8 @@ class Sequence():
 
     
     def have_loops(self, return_num=False):
-        res, _ = count_loops(self.data, self.contour, self.n)
+        res = count_loops(self.data, self.contour, self.n)
+        # print(res)
         if return_num:
             return res>0, res
         else:
@@ -55,28 +58,18 @@ class Sequence():
         intersections = ray_tracing(self.data, self.contour, self.n)
         return (intersections % 2)==1 
 
-
-    def have_dead_ends(self):
-        _, de = count_loops(self.data, self.contour, self.n)
-        return de!=0
-
     
     def is_contour(self, return_all=False):
         loop = self.have_loops()
         md = self.have_missed_data()
         sc = self.is_single_contour()
-        # de = self.have_dead_ends()
-        # unique_data = self.is_data_unique()
 
         res = True if not loop and not md and sc else False
-        # res = True if not loop and not md and sc and not de else False
 
         if return_all:
             res_all = {'Missed data': md, 
                    'Loops': loop,
-                #    'Dead ends': de,
                    'Single contour': sc, 
-                #    'Unique data': unique_data,
                    'Contour': res}
             return res_all
         else:
@@ -91,7 +84,7 @@ class Sequence():
         return calc_path(self.data, self.sim, self.contour, self.n)
 
 
-    def sorted(self, key="nn_no_loops"):
+    def sorted(self, key="best"):
         sort_ind = sort_dict[key](self.data, self.sim, self.n)
         sorted_data = Sequence(self.data, sort_ind)
         return sorted_data
@@ -99,12 +92,19 @@ class Sequence():
 
     def show_contour(self, save_fig=False, fig_name='figure'):
         have_md, md = self.have_missed_data(return_num=True)
+        beg, end = count_loops(self.data, self.contour, self.n, show=True)
 
         plt.figure(num)
         if have_md:
             plt.scatter(self.data[md,0], self.data[md,1], c='g', s=30)
         plt.scatter(self.data[self.contour,0],self.data[self.contour,1], c='b', s=30)
         plt.plot(self.data[self.contour,0],self.data[self.contour,1],'r')
+        for i in range (len(beg)):
+            plt.plot(self.data[self.contour[beg[i]:beg[i]+2],0], 
+                        self.data[self.contour[beg[i]:beg[i]+2],1],'y')
+            plt.plot(self.data[self.contour[end[i]:end[i]+2],0], 
+                        self.data[self.contour[end[i]:end[i]+2],1],'y')
+        
         if fig_name=='polar':
             plt.scatter(np.sum(self.data[:, 0])/self.n,np.sum(self.data[:, 1])/self.n, c='y', s=30)
         if save_fig:
@@ -114,9 +114,16 @@ class Sequence():
 
 
 if __name__=="__main__":
-    data = np.loadtxt("../data/2.dat")
-    seq = Sequence(data) 
+    # save pictures for diploma
+    datas = []
+    for subdir, dirs, files in os.walk('datasets'):
+        for file in files:
+            filepath = subdir + os.sep + file
+            if filepath.endswith(".dat"):
+                datas.append(np.loadtxt(filepath))
+    n = len(datas)
     
+    seq = Sequence(datas[0]) 
     global num
     num = 0
     seq.show_contour(save_fig=True)
@@ -124,4 +131,5 @@ if __name__=="__main__":
         num+=1
         sort_seq = seq.sorted(key=method)
         sort_seq.show_contour(save_fig=True, fig_name=method)
+        # sort_seq.show_contour()
     

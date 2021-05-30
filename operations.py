@@ -2,12 +2,15 @@ import numpy as np
 import math
 from math import inf
 
+from numpy.core.fromnumeric import sort
+
 two_opt_swap = lambda r,i,k: np.concatenate((r[0:i+1],r[k:i:-1],r[k+1:len(r)]))
 
 
-def get_abc(xs, ys, n):
+def get_abc(xs, ys):
     ''' Returns coeffs of the equations of each line:
-        ax + by + c = 0 '''
+        ax + by + c = 0. 
+    '''
     a = ys[:-1] - ys[1:]
     b = xs[1:] - xs[:-1]
     c = xs[:-1]*ys[1:] - xs[1:]*ys[:-1]
@@ -17,7 +20,8 @@ def get_abc(xs, ys, n):
 
 def intersect_x(a1, a2, b1, b2, c1, c2):
     ''' Returns have these lines intersection, 
-                x-coord of intersection point of two lines'''
+                x-coord of intersection point of two lines.
+    '''
     if (b1*a2-b2*a1)!=0:
         y_int = (c2*a1-c1*a2)/(b1*a2-b2*a1)  
         x_int = (-c1-b1*y_int)/a1
@@ -28,6 +32,14 @@ def intersect_x(a1, a2, b1, b2, c1, c2):
 
 
 def ray_tracing(data, sorted_data, n):
+    ''' Returns how many times ray originating from 
+        the centroid and parallel to the x axis
+        intersects contour made from data sorted by sorted_data.
+
+        This function is using to understand if centroid is in contour.
+        It means that contour is single otherwise not. 
+    '''
+
     res = 0
     
     center = [np.sum(data[:, 0])/n,np.sum(data[:, 1])/n]
@@ -38,7 +50,7 @@ def ray_tracing(data, sorted_data, n):
     ys = data[sorted_data,1]
     xs = np.append(xs,xs[0])
     ys = np.append(ys,ys[0])
-    a, b, c = get_abc(xs, ys, n)
+    a, b, c = get_abc(xs, ys)
     
     for i in range (n-1):
         if a[i]!=0:        
@@ -51,36 +63,67 @@ def ray_tracing(data, sorted_data, n):
     return res
 
 
-# def get_dead_ends(data, sorted_data):
-#     _, indices = np.unique(data[sorted_data], return_inverse=True, axis=0)
-#     res = np.append(indices[:2]==indices[-2:], indices[2:]==indices[:-2])
-#     return np.where(res)[0]
+def count_loops(data, sorted_data, n, show=False):
+    ''' Returns number of intersections in data sorted 
+        in 'sorted_data' order if parameter show is False
+        Otherwise returns arrays with indexes of sorted_data 
+        where contour intersects.
+    '''
 
-
-def count_loops(data, sorted_data, n):
     res = 0
-    de = 0
-
+    sorted_data = np.append(sorted_data,sorted_data[0])
     xs = data[sorted_data,0]
     ys = data[sorted_data,1]
     n = len(xs)
-
-    a,b,c = get_abc(xs, ys, n)
+    beg = []
+    end = []
+    a,b,c = get_abc(xs, ys)
     for i in range (n-3):
+        # consider non-adjacent edges
         for j in range (i+2, n-1):
+            # don't consider last edge while considering first edge 
+            # because they're adjacent
+            if i==0 and j==n-2:
+                continue
+            # don't consider edge that goes after degenerated to a point edge
+            if j==i+2 and (a[j-1]==0 and b[j-1]==0):
+                continue
             not_null, x_int = intersect_x(a[i], a[j], b[i], b[j], c[i], c[j])
-            res += 1 if not_null and (min(xs[i], xs[i+1]) <= x_int <= max(xs[i], xs[i+1]) and
-                                      min(xs[j], xs[j+1]) <= x_int <= max(xs[j], xs[j+1])) else 0
 
-            de += 1 if not not_null and c[i]*a[j]==c[j]*a[i] and not(xs[i]==xs[j] and ys[i]==ys[j]) else 0
+            if not_null and (min(xs[i], xs[i+1]) <= x_int <= max(xs[i], xs[i+1]) and
+                                    min(xs[j], xs[j+1]) <= x_int <= max(xs[j], xs[j+1])):
+                res+=1        
+                beg.append(i)
+                end.append(j)
 
-    return res, de
+    if show:
+        return beg, end
+    return res
 
 
 def no_loops(data, sorted_data, n):
+    ''' Returns data without loops using algorithm 
+        based on 2-opt swapping mechanism. 
+    '''
+
     x = data[:,0]
     y = data[:,1]
     new = sorted_data.copy()
+
+    # Delete non-unique data from sorted array 'new', save it to 'non_uni'
+    uni, inv, counts = np.unique(data[sorted_data], return_inverse=True, return_counts=True, axis=0)
+    non_uni = []
+    non_cons_points = []
+    for i in range (len(uni)):
+        if counts[i]>1:
+            rep = np.where(inv==i)[0]
+            non_uni.append(sorted_data[rep])
+            non_cons_points.append(rep[1:])
+    new = np.delete(new,non_cons_points)
+    n = len(new) 
+    new = np.append(new,new[0])
+
+    # find intersections and delete them using 'two_opt_swap' function
     flag = True
     it = 0
     while flag and it<50:
@@ -89,12 +132,20 @@ def no_loops(data, sorted_data, n):
         
         xs = x[new]
         ys = y[new]
+        
+        a, b, c = get_abc(xs, ys)
 
-        a, b, c = get_abc(xs, ys, n)
-
-        for i in range (n-3):
-            for j in range (i+2, n-1):
+        for i in range (n-2):
+            # consider non-adjacent edges
+            for j in range (i+2, n):
+                # don't consider last edge while considering first edge 
+                # because they're adjacent
+                if i==0 and j==n-1:
+                    continue
+                
+                # find intersection of two edges
                 not_null, x_int = intersect_x(a[i], a[j], b[i], b[j], c[i], c[j])
+                # check where the intersection lies
                 if not_null and (min(xs[i], xs[i+1]) <= x_int <= max(xs[i], xs[i+1]) and
                                  min(xs[j], xs[j+1]) <= x_int <= max(xs[j], xs[j+1])):
                     flag = True
@@ -104,10 +155,18 @@ def no_loops(data, sorted_data, n):
                 continue
             break
 
+    # add non-unique data after similar data
+    for i in range (len(non_uni)):
+        ind = np.where(new==non_uni[i][0])[0]
+        new = np.insert(new,ind,non_uni[i][1:])
+
+    # delete closing edge    
+    new = np.delete(new,-1)
     return new
 
 
 def sort_nn(data, sim, n):
+    ''' Returns data sorted by the nearest neighbour algorithm. '''
     sorted_data = [0]
     while True:
         tmp = inf
@@ -120,11 +179,13 @@ def sort_nn(data, sim, n):
         if ind>0:
             sorted_data.append(ind)
         else:
-            break        
-    return sorted_data
+            break   
+ 
+    return np.array(sorted_data)     
 
 
 def sort_nn_md(data, sim, n, return_md=False):
+    ''' Returns data sorted by the nearest neighbour algorithm. '''
     sorted_data = [0]
     while True:
         tmp = inf
@@ -140,7 +201,8 @@ def sort_nn_md(data, sim, n, return_md=False):
             sorted_data.append(ind)
         else:
             break    
-            
+
+    sorted_data = np.array(sorted_data)
     if return_md:
         missed_data = np.arange(n)
         md = np.delete(missed_data, missed_data[sorted_data])
@@ -151,40 +213,32 @@ def sort_nn_md(data, sim, n, return_md=False):
 
 
 def sort_nn_loops(data, sim, n):
-    sorted_data, md = sort_nn_md(data, sim, n, return_md=True)
+    ''' Returns data sorted by the nearest neighbour algorithm
+        and missed data appending algorithm. 
+    '''    
 
-    for i in md:
-        tmp = inf
-        ind = -1
-        for j in range (len(sorted_data)-1):
-            ij = np.linalg.norm(data[i]-data[sorted_data[j]])
-            ij1 = np.linalg.norm(data[i]-data[sorted_data[j+1]])
-            if (ij + ij1)<tmp:
-                tmp = ij +ij1
-                ind = j                                                                         
-        if np.linalg.norm(data[i]-data[sorted_data[j]])+np.linalg.norm(data[i]-data[0])<tmp:
-            sorted_data.append(i)
-        else:
-            sorted_data.insert(ind+1,i)
+    sorted_data, md = sort_nn_md(data, sim, n, return_md=True)
+    sorted_data = append_md(sorted_data, md, sim)
     
     return sorted_data
 
 
 def sort_nn_no_loops(data, sim, n):
+    ''' Returns data sorted by the nearest neighbour algorithm,
+        missed data appending algorithm and
+        loops removal algorithm. 
+    '''    
+
     sorted_data = sort_nn_loops(data, sim, n)
     new = no_loops(data, sorted_data, n)
 
     return new
 
 
-def sort_21_loops(data, sim, n):
-    mid = np.argmin(sim[0][4:])
-    data1 = data[:mid]
-    data2 = data[mid:]
-
-    sorted_data = np.arange(mid)
-    missed_data = np.arange(n)
-    md = np.delete(missed_data, missed_data[sorted_data])
+def append_md(sorted_data, md, sim):
+    ''' Returns sorted_data to which md was added 
+        using nearest neighbour concept. 
+    '''
 
     for i in md:
         tmp = inf
@@ -199,11 +253,30 @@ def sort_21_loops(data, sim, n):
             sorted_data = np.append(sorted_data,i)
         else:
             sorted_data = np.insert(sorted_data,ind+1,i)
+    
+    return sorted_data
+
+
+def sort_21_loops(data, sim, n):
+    ''' Returns data sorted by algorithm based on 
+        inserting the second contour into the first one. 
+    '''
+
+    mid = np.argmin(sim[0][4:])
+    sorted_data = np.arange(mid)
+    md = np.delete(np.arange(n), sorted_data)
+
+    sorted_data = append_md(sorted_data, md, sim)
 
     return sorted_data
 
 
 def sort_21_no_loops(data, sim, n):
+    ''' Returns data sorted by algorithm based on 
+        inserting the second contour into the first one 
+        and loop removal algorithm.
+    '''
+
     sorted_data = sort_21_loops(data, sim, n)
     new = no_loops(data, sorted_data, n)
 
@@ -211,95 +284,120 @@ def sort_21_no_loops(data, sim, n):
 
 
 def clockwiseangle_and_distance(point, origin, refvec):
-    vector = [point[0]-origin[0], point[1]-origin[1]]
-    lenvector = math.hypot(vector[0], vector[1])
+    ''' Returns polar coordinates of point with center = origin
+        and axis = refvec. 
+    '''
+
+    vec = [point[0]-origin[0], point[1]-origin[1]]
+    lenvec = math.hypot(vec[0], vec[1])
     
-    if lenvector == 0:
+    if lenvec == 0:
         return -math.pi, 0
     
-    normalized = [vector[0]/lenvector, vector[1]/lenvector]
+    normalized = [vec[0]/lenvec, vec[1]/lenvec]
     dotprod  = normalized[0]*refvec[0] + normalized[1]*refvec[1]     # x1*x2 + y1*y2
     diffprod = refvec[1]*normalized[0] - refvec[0]*normalized[1]     # x1*y2 - y1*x2
     angle = math.atan2(diffprod, dotprod)
     
     if angle < 0:
-        return 2*math.pi+angle, lenvector
+        return 2*math.pi+angle, lenvec
     
-    return angle, lenvector
+    return [angle, lenvec]
 
 
 def sort_angle(data, sim, n):
+    ''' Returns data sorted by polar coordinates. '''
     origin = [np.sum(data[:, 0])/n,np.sum(data[:, 1])/n]
     refvec = [0,1]
+    # find polar coordinates
     angle = np.array([clockwiseangle_and_distance(point, origin, refvec) for point in data])
-    sort = np.argsort(angle[:,0])
+    # sort by polar coordinates
+    sort = np.lexsort((angle[:,1],angle[:,0]))
 
     return sort
 
 
 def sort_best(data, sim, n):
-    res = [sort_nn_no_loops(data, sim, n)]
-    cnt, _ = count_loops(data, res[0], n)
-    cnt_loops = [cnt]
-    if cnt_loops[-1]>0:
-        res.append(sort_21_no_loops(data, sim, n))
-        cnt, _ = count_loops(data, res[-1], n)
-        cnt_loops.append(cnt)
-        if cnt_loops[-1]>0:
-            res.append(sort_ch_no_loops(data, sim, n))
-            cnt, _ = count_loops(data, res[-1], n)
-            cnt_loops.append(cnt)
+    ''' Returns data sorted by NN with no loops algorithm
+        if it works correctly 
+        otherwise data sorted by adding 2nd contour into 1st with no loops algorithm
+        if it works correctly. 
+    '''
 
-    return res[np.argmin(np.array(cnt_loops))]
+    res = sort_nn_no_loops(data, sim, n)
+    if count_loops(data, res, n)>0:
+        res = sort_21_no_loops(data, sim, n)
+    # res = [sort_nn_no_loops(data, sim, n)]
+    # cnt = count_loops(data, res[0], n)
+    # cnt_loops = [cnt]
+    # if cnt_loops[-1]>0:
+    #     res.append(sort_21_no_loops(data, sim, n))
+        # cnt = count_loops(data, res[-1], n)
+        # cnt_loops.append(cnt)
+        # if cnt_loops[-1]>0:
+        #     res.append(sort_ch_no_loops(data, sim, n))
+        #     cnt = count_loops(data, res[-1], n)
+        #     cnt_loops.append(cnt)
+
+    # return res[np.argmin(np.array(cnt_loops))]
+    return res
 
 
 def rotate(A,B,C):
-    ''' returns where is point C for vector AB 
+    ''' Returns where is point C for vector AB 
         if returns negative number - C is right
-        otherwise left'''
+        otherwise left.
+    '''
     return (B[0]-A[0])*(C[1]-B[1])-(B[1]-A[1])*(C[0]-B[0])
 
 
-def jarvismarch(A, n):
-    ''' returns minimum convex polygon
-        using Jarvis algorithm '''
-    P = [i for i in range(n)] # list with points' numbers
-    for i in range(1,n):
-        if A[P[i]][0]<A[P[0]][0]: 
-            P[i], P[0] = P[0], P[i] 
+def jarvismarch(data, sim, n):
+    ''' Returns minimum convex polygon
+        using Jarvis algorithm. 
+    '''
     
-    H = [P[0]]
-    del P[0]
-    P.append(H[0])
+    points = np.arange(n)
+    ind_min_x = np.argmin(data[:,0])
+    hull = [ind_min_x]
+    points = np.delete(points,ind_min_x)
+    points = np.append(points,ind_min_x)
 
     while True:
         right = 0
-        for i in range(1,len(P)):
-            if rotate(A[H[-1]],A[P[right]],A[P[i]])<0:
+        for i in range(1,len(points)):
+            if rotate(data[hull[-1]],data[points[right]],data[points[i]])<0:
                 right = i
-        if P[right]==H[0]: 
+        if points[right]==hull[0]: 
             break
         else:
-            H.append(P[right])
-            del P[right]
-    return H
+            hull = np.append(hull,points[right])
+            points = np.delete(points,right)
+    return hull
 
 
 def distance_ch(p1,p2,p3):
+    ''' Returns distance from point p3 to line p1,p2. '''
     d = np.cross(p2-p1,p3-p1)/np.linalg.norm(p2-p1)
     return d
 
 
 def distance_ch_vert(d,a):
+    ''' Returns hypotenuse of a right triangle with legs d and a. '''
     return np.sqrt(d**2+a**2)
 
 
 def sort_ch_loops(data, sim, n):
-    hull = jarvismarch(data, n)
+    ''' Returns indexes of data sorted using algorithm 
+        based on adding point into Convex Hull. 
+    '''
+
+    # find hull
+    hull = jarvismarch(data, sim, n)
     nearest_line = [[i] for i in hull]
     distances = [[0] for i in hull]
     hull = np.append(hull, hull[0])
     
+    # find nearest edge of convex hull and distance to it for other points
     for i, point in enumerate(data):
         if i in hull:
             continue
@@ -314,6 +412,8 @@ def sort_ch_loops(data, sim, n):
             nearest_line[ind].append(i)
             distances[ind].append(a)
     
+    # sort points by the distance of their projection from 
+    # the first point of the nearest edge
     sorted_data = []
     for i in range(len(nearest_line)):
         c = nearest_line[i]
@@ -326,11 +426,16 @@ def sort_ch_loops(data, sim, n):
         
         for j in range(len(c)):
             sorted_data.append(c[b[j][0]])
-    
+    sorted_data = np.array(sorted_data)
     return sorted_data
 
 
 def sort_ch_no_loops(data, sim, n):
+    ''' Returns indexes of data sorted using algorithm 
+        based on adding point into Convex Hull and 
+        loop removal algorithm. 
+    ''' 
+
     sorted_data = sort_ch_loops(data, sim, n)
     new = no_loops(data, sorted_data, n)
 
@@ -338,6 +443,8 @@ def sort_ch_no_loops(data, sim, n):
 
 
 def two_opt(cities,sim,n,improvement_threshold=0.001): 
+    ''' Returns indexes of data sorted using 2-opt algorithm. '''
+
     route = np.arange(n) 
     improvement_factor = 1 
     # the distance of the initial path.
@@ -352,10 +459,15 @@ def two_opt(cities,sim,n,improvement_threshold=0.001):
                     route = new_route 
                     best_distance = new_distance 
         improvement_factor = 1 - best_distance/distance_to_beat 
+    
     return route 
 
 
 def calc_path(data, sim, sorted, n):
+    ''' Returns length of contour made of data sorted 
+        by indexes in parameter sorted. 
+    '''
+
     path = 0
     for i in range (n-1):
         path += sim[sorted[i]][sorted[i+1]]
