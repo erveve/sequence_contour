@@ -1,3 +1,4 @@
+from ast import iter_child_nodes
 import numpy as np
 import math
 from math import inf
@@ -126,6 +127,8 @@ def no_loops(data, sorted_data, n):
     # find intersections and delete them using 'two_opt_swap' function
     flag = True
     it = 0
+    # normalize = lambda x: x / np.linalg.norm(x)
+    # de = np.array([])
     while flag and it<50:
         it+=1
         flag = False
@@ -154,6 +157,26 @@ def no_loops(data, sorted_data, n):
             else:
                 continue
             break
+
+        # Not quite a successful attempt to remove deadlocks.
+        # It removed dead ends, but because of this, loops appeared
+        # And took more time to find contour and built contour less than 1% shorter 
+        # for imporoved NN and N21 algorithms and less than 1% longer 
+        # for improved CH algorithm.
+        # Because of this this part was commented.
+
+        # else:
+        #     vec = np.vstack((-a, b)).T
+        #     norm_vec = np.array(list(map(normalize, vec)))
+        #     dotprod = norm_vec[:-1,0]*norm_vec[1:,0] + norm_vec[:-1,1]*norm_vec[1:,1]
+        #     de1 = np.where(dotprod[1:]<-1+1e-3)[0]
+        #     if len(de)==len(de1):
+        #         if np.all(de==de1):
+        #             break
+        #     de = de1
+        #     for ind in de:
+        #         new = two_opt_swap(new,ind,ind+2)
+        #         flag = True
 
     # add non-unique data after similar data
     for i in range (len(non_uni)):
@@ -185,7 +208,9 @@ def sort_nn(data, sim, n):
 
 
 def sort_nn_md(data, sim, n, return_md=False):
-    ''' Returns data sorted by the nearest neighbour algorithm. '''
+    ''' Returns data sorted by the nearest neighbour algorithm 
+        which is single contour. 
+    '''
     sorted_data = [0]
     while True:
         tmp = inf
@@ -327,19 +352,7 @@ def sort_best(data, sim, n):
     res = sort_nn_no_loops(data, sim, n)
     if count_loops(data, res, n)>0:
         res = sort_21_no_loops(data, sim, n)
-    # res = [sort_nn_no_loops(data, sim, n)]
-    # cnt = count_loops(data, res[0], n)
-    # cnt_loops = [cnt]
-    # if cnt_loops[-1]>0:
-    #     res.append(sort_21_no_loops(data, sim, n))
-        # cnt = count_loops(data, res[-1], n)
-        # cnt_loops.append(cnt)
-        # if cnt_loops[-1]>0:
-        #     res.append(sort_ch_no_loops(data, sim, n))
-        #     cnt = count_loops(data, res[-1], n)
-        #     cnt_loops.append(cnt)
 
-    # return res[np.argmin(np.array(cnt_loops))]
     return res
 
 
