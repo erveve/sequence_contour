@@ -11,4 +11,4 @@
 1. Установите requirements.txt:  
 ```pip install -r requirements.txt```
 2. Запустите main.py:   
-```python main.py <input_file.dat> <output_file.dat>```
+```python main.py <input_file.dat> <output_file.geo_unrolled>```
