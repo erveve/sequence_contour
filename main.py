@@ -41,7 +41,7 @@ def make_cad_file(sort_seq, output_file):
 def main():
 
     if len(sys.argv)!=3:
-        print("ERROR: Invalid number of arguments for main.py\nWrite: python main.py <input_file.dat> <output_file.dat>")
+        print("ERROR: Invalid number of arguments for main.py\nWrite: python main.py <input_file.dat> <output_file.geo_unrolled>")
     else:
         input_file = sys.argv[1]
         output_file = sys.argv[2]
